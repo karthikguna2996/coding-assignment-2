@@ -180,13 +180,21 @@ app.get("/tweets/:tweetId/", middleWareFunction, async (request, response) => {
     response.status(401);
     response.send("Invalid Request");
   } else {
+    let likesQuery = `
+     SELECT COUNT(like_id) AS likes
+     FROM like
+     WHERE tweet_id = ${tweetId}
+
+    `;
+    let { likes } = await db.get(likesQuery);
     let getQuery4 = `
-          SELECT t.tweet,COUNT(like.like_id) AS likes,COUNT(t.reply_id) AS replies,tweet.date_time AS dateTime
-          FROM (tweet INNER JOIN reply ON tweet.tweet_id = reply.tweet_id) AS t JOIN like ON t.tweet_id = like.tweet_id
-          WHERE t.tweet_id = ${tweetId}
+          SELECT t.tweet,${likes} AS likes,COUNT(t.reply_id) AS replies,tweet.date_time AS dateTime
+          FROM (tweet INNER JOIN reply ON tweet.tweet_id = reply.tweet_id) as t
           GROUP BY t.tweet_id
+          HAVING t.tweet_id = ${tweetId}
       `;
     let getResponse4 = await db.get(getQuery4);
+    console.log(getResponse4);
     response.send(getResponse4);
   }
 });
@@ -275,13 +283,44 @@ app.get(
 );
 
 app.get("/user/tweets/", middleWareFunction, async (request, response) => {
-  let getQuery7 = `
-          SELECT t.tweet,COUNT(like.like_id) AS likes,COUNT(t.reply_id) AS replies,tweet.date_time AS dateTime
-          FROM (tweet INNER JOIN reply ON tweet.tweet_id = reply.tweet_id) AS t JOIN like ON t.tweet_id = like.tweet_id
-          GROUP BY t.tweet_id
-      `;
-  let getResponse = await db.all(getQuery7);
-  response.send(getResponse);
+  let username = request.username;
+  let userIdQuery = `select user_id from user where username = '${username}'`;
+  let getUserId = await db.get(userIdQuery);
+  let userId = getUserId.user_id;
+
+  let likesQuery = `
+         SELECT tweet.tweet,COUNT(Like_id) AS likes
+         FROM tweet JOIN like ON like.tweet_id = tweet.tweet_id
+         WHERE tweet.user_id = ${userId}
+         GROUP BY tweet.tweet_id
+    `;
+  let likes = await db.all(likesQuery);
+  console.log(likes);
+
+  let repliesQuery = `
+        SELECT tweet.tweet ,COUNT(reply_id) AS replies,tweet.date_time AS dateTime
+        FROM tweet JOIN reply ON tweet.tweet_id = reply.tweet_id
+        WHERE tweet.user_id = ${userId}
+        GROUP BY tweet.tweet_id
+
+    `;
+  let replies = await db.all(repliesQuery);
+  console.log(replies);
+  let ansList = [];
+  for (let i of replies) {
+    for (let j of likes) {
+      if (i.tweet === j.tweet) {
+        ansList.push({
+          tweet: i.tweet,
+          likes: j.likes,
+          replies: i.replies,
+          dateTime: i.dateTime,
+        });
+      }
+    }
+  }
+  console.log(ansList);
+  response.send(ansList);
 });
 
 app.post("/user/tweets/", middleWareFunction, async (request, response) => {
